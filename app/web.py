@@ -18,10 +18,17 @@ VIDEOS_DIR = BASE_DIR / "videos"
 TEMP_DIR = BASE_DIR / "temp"
 LOGS_DIR = BASE_DIR / "logs"
 
+# 管理员账号：可以下载、删除
 WEB_USERNAME = os.getenv("WEB_USERNAME", "admin")
 WEB_PASSWORD = os.getenv("WEB_PASSWORD", "")
+
+# 访问用户账号：只能下载，不能删除
+WEB_VIEWER_USERNAME = os.getenv("WEB_VIEWER_USERNAME", "viewer")
+WEB_VIEWER_PASSWORD = os.getenv("WEB_VIEWER_PASSWORD", "")
+
 WEB_HOST = os.getenv("WEB_HOST", "127.0.0.1")
 WEB_PORT = int(os.getenv("WEB_PORT", "8010"))
+WEB_SECRET_KEY = os.getenv("WEB_SECRET_KEY", "change-this-secret-key")
 
 BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 
@@ -37,17 +44,31 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("WEB_SECRET_KEY", "change-this-secret-key"),
+    secret_key=WEB_SECRET_KEY,
 )
+
+
+def get_user_role(request: Request) -> str:
+    return str(request.session.get("role", ""))
 
 
 def is_logged_in(request: Request) -> bool:
     return bool(request.session.get("logged_in"))
 
 
+def is_admin(request: Request) -> bool:
+    return get_user_role(request) == "admin"
+
+
 def require_login(request: Request):
     if not is_logged_in(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def require_admin(request: Request):
+    require_login(request)
+    if not is_admin(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 
 def format_size(size_bytes: int) -> str:
@@ -151,6 +172,8 @@ async def index(request: Request):
             "video_count": len(videos),
             "temp_count": len(temp_files),
             "total_size": format_size(total_size_bytes),
+            "role": get_user_role(request),
+            "can_delete": is_admin(request),
         },
     )
 
@@ -175,8 +198,22 @@ async def login_submit(
     username: str = Form(...),
     password: str = Form(...),
 ):
+    username = username.strip()
+
     if username == WEB_USERNAME and password == WEB_PASSWORD:
         request.session["logged_in"] = True
+        request.session["role"] = "admin"
+        request.session["username"] = username
+        return RedirectResponse(url="/", status_code=302)
+
+    if (
+        WEB_VIEWER_PASSWORD
+        and username == WEB_VIEWER_USERNAME
+        and password == WEB_VIEWER_PASSWORD
+    ):
+        request.session["logged_in"] = True
+        request.session["role"] = "viewer"
+        request.session["username"] = username
         return RedirectResponse(url="/", status_code=302)
 
     return templates.TemplateResponse(
@@ -210,7 +247,7 @@ async def download_file(request: Request, filename: str):
 
 @app.post("/delete/{filename}")
 async def delete_file(request: Request, filename: str):
-    require_login(request)
+    require_admin(request)
 
     file_path = safe_file_path(filename)
     file_path.unlink()
