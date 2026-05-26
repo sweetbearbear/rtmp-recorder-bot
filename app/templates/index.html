@@ -51,13 +51,13 @@
             color: var(--text);
         }
 
-        。container {
-            max-width: 1120px;
+        .container {
+            width: min(1120px, calc(100% - 32px));
             margin: 0 auto;
-            padding: 28px 18px 60px;
+            padding: 28px 0 60px;
         }
 
-        。topbar {
+        .topbar {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -65,8 +65,19 @@
             margin-bottom: 24px;
         }
 
-        h1 { margin: 0; font-size: 28px; }
-        .subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
+        h1 {
+            margin: 0;
+            font-size: clamp(32px, 8vw, 46px);
+            line-height: 1.15;
+            letter-spacing: -0.04em;
+        }
+
+        .subtitle {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.6;
+        }
 
         .top-actions {
             display: flex;
@@ -75,7 +86,7 @@
             flex-wrap: wrap;
         }
 
-        。role-badge {
+        .role-badge {
             padding: 8px 10px;
             border: 1px solid var(--border);
             border-radius: 999px;
@@ -124,7 +135,7 @@
             box-shadow: 0 10px 30px var(--shadow);
         }
 
-        。section-header {
+        .section-header {
             padding: 16px 18px;
             border-bottom: 1px solid var(--border);
             display: flex;
@@ -153,7 +164,7 @@
 
         tr:last-child td { border-bottom: none; }
 
-        。filename {
+        .filename {
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             word-break: break-all;
         }
@@ -179,6 +190,29 @@
         .empty { padding: 26px 18px; color: var(--muted); }
 
         @media (max-width: 760px) {
+            .container {
+                width: min(100% - 28px, 1120px);
+                padding-top: 20px;
+            }
+
+            h1 {
+                font-size: 34px;
+                line-height: 1.15;
+            }
+
+            .subtitle {
+                font-size: 15px;
+                line-height: 1.6;
+            }
+
+            .section-header {
+                padding: 18px 20px;
+            }
+
+            .empty {
+                padding: 26px 20px;
+            }
+
             .stats { grid-template-columns: 1fr; }
             .topbar { align-items: flex-start; flex-direction: column; }
             table, thead, tbody, th, td, tr { display: block; }
