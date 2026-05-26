@@ -2,28 +2,62 @@
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8">
-    <title>QQ直播 录制管理</title>
+    <title>直播 录制管理</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
 
     <style>
-        * {
-            box-sizing: border-box;
+        :root {
+            color-scheme: light dark;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --card-2: #f8fafc;
+            --text: #111827;
+            --muted: #6b7280;
+            --border: #d1d5db;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --danger-bg: #fee2e2;
+            --danger-text: #991b1b;
+            --danger-hover: #fecaca;
+            --neutral-btn: #ffffff;
+            --shadow: rgba(15, 23, 42, .08);
         }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #111827;
+                --card: #1f2937;
+                --card-2: #182131;
+                --text: #e5e7eb;
+                --muted: #9ca3af;
+                --border: #374151;
+                --primary: #2563eb;
+                --primary-hover: #1d4ed8;
+                --danger-bg: #7f1d1d;
+                --danger-text: #fecaca;
+                --danger-hover: #991b1b;
+                --neutral-btn: #1f2937;
+                --shadow: rgba(0, 0, 0, .25);
+            }
+        }
+
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #111827;
-            color: #e5e7eb;
+            background: var(--bg);
+            color: var(--text);
         }
 
-        .container {
+        。container {
             max-width: 1120px;
             margin: 0 auto;
             padding: 28px 18px 60px;
         }
 
-        .topbar {
+        。topbar {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -31,33 +65,37 @@
             margin-bottom: 24px;
         }
 
-        h1 {
-            margin: 0;
-            font-size: 28px;
+        h1 { margin: 0; font-size: 28px; }
+        .subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
-        .subtitle {
-            margin-top: 6px;
-            color: #9ca3af;
-            font-size: 14px;
+        。role-badge {
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--card);
+            color: var(--muted);
+            font-size: 13px;
         }
 
-        .logout-form {
-            margin: 0;
-        }
+        .logout-form { margin: 0; }
 
         .logout-btn {
             padding: 10px 14px;
-            border: 1px solid #4b5563;
+            border: 1px solid var(--border);
             border-radius: 12px;
-            background: #1f2937;
-            color: #e5e7eb;
+            background: var(--neutral-btn);
+            color: var(--text);
             cursor: pointer;
         }
 
-        .logout-btn:hover {
-            background: #374151;
-        }
+        .logout-btn:hover { filter: brightness(.96); }
 
         .stats {
             display: grid;
@@ -67,81 +105,60 @@
         }
 
         .stat-card {
-            background: #1f2937;
-            border: 1px solid #374151;
+            background: var(--card);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 18px;
+            box-shadow: 0 10px 30px var(--shadow);
         }
 
-        .stat-label {
-            color: #9ca3af;
-            font-size: 13px;
-            margin-bottom: 8px;
-        }
-
-        .stat-value {
-            font-size: 24px;
-            font-weight: 800;
-        }
+        .stat-label { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+        .stat-value { font-size: 24px; font-weight: 800; }
 
         .section {
-            background: #1f2937;
-            border: 1px solid #374151;
+            background: var(--card);
+            border: 1px solid var(--border);
             border-radius: 18px;
             overflow: hidden;
             margin-top: 18px;
+            box-shadow: 0 10px 30px var(--shadow);
         }
 
-        .section-header {
+        。section-header {
             padding: 16px 18px;
-            border-bottom: 1px solid #374151;
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 12px;
         }
 
-        .section-title {
-            font-size: 18px;
-            font-weight: 800;
-        }
+        .section-title { font-size: 18px; font-weight: 800; }
+        .hint { color: var(--muted); font-size: 13px; }
 
-        .hint {
-            color: #9ca3af;
-            font-size: 13px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
+        table { width: 100%; border-collapse: collapse; }
 
         th, td {
             padding: 14px 18px;
-            border-bottom: 1px solid #374151;
+            border-bottom: 1px solid var(--border);
             text-align: left;
             font-size: 14px;
         }
 
         th {
-            color: #9ca3af;
+            color: var(--muted);
             font-weight: 600;
-            background: #182131;
+            background: var(--card-2);
         }
 
-        tr:last-child td {
-            border-bottom: none;
-        }
+        tr:last-child td { border-bottom: none; }
 
-        .filename {
+        。filename {
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             word-break: break-all;
         }
 
-        .actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
         .btn {
             display: inline-block;
@@ -153,79 +170,26 @@
             font-size: 13px;
         }
 
-        .download {
-            background: #2563eb;
-            color: #ffffff;
-        }
+        .download { background: var(--primary); color: #ffffff; }
+        .download:hover { background: var(--primary-hover); }
 
-        .download:hover {
-            background: #1d4ed8;
-        }
+        .delete { background: var(--danger-bg); color: var(--danger-text); }
+        .delete:hover { background: var(--danger-hover); }
 
-        .delete {
-            background: #7f1d1d;
-            color: #fecaca;
-        }
-
-        .delete:hover {
-            background: #991b1b;
-        }
-
-        .empty {
-            padding: 26px 18px;
-            color: #9ca3af;
-        }
+        .empty { padding: 26px 18px; color: var(--muted); }
 
         @media (max-width: 760px) {
-            .stats {
-                grid-template-columns: 1fr;
-            }
-
-            .topbar {
-                align-items: flex-start;
-                flex-direction: column;
-            }
-
-            table, thead, tbody, th, td, tr {
-                display: block;
-            }
-
-            thead {
-                display: none;
-            }
-
-            tr {
-                border-bottom: 1px solid #374151;
-                padding: 10px 0;
-            }
-
-            td {
-                border-bottom: none;
-                padding: 8px 18px;
-            }
-
-            td::before {
-                display: block;
-                color: #9ca3af;
-                font-size: 12px;
-                margin-bottom: 4px;
-            }
-
-            td:nth-child(1)::before {
-                content: "文件名";
-            }
-
-            td:nth-child(2)::before {
-                content: "大小";
-            }
-
-            td:nth-child(3)::before {
-                content: "时间";
-            }
-
-            td:nth-child(4)::before {
-                content: "操作";
-            }
+            .stats { grid-template-columns: 1fr; }
+            .topbar { align-items: flex-start; flex-direction: column; }
+            table, thead, tbody, th, td, tr { display: block; }
+            thead { display: none; }
+            tr { border-bottom: 1px solid var(--border); padding: 10px 0; }
+            td { border-bottom: none; padding: 8px 18px; }
+            td::before { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+            td:nth-child(1)::before { content: "文件名"; }
+            td:nth-child(2)::before { content: "大小"; }
+            td:nth-child(3)::before { content: "时间"; }
+            td:nth-child(4)::before { content: "操作"; }
         }
     </style>
 </head>
@@ -234,13 +198,19 @@
     <div class="container">
         <div class="topbar">
             <div>
-                <h1>QQ直播 录制管理</h1>
-                <div class="subtitle">浏览、下载、删除 服务器 上的录制文件。</div>
+                <h1>直播 录制管理</h1>
+                <div class="subtitle">浏览、下载 服务器 上的录制文件。管理员可以删除，访问用户只能下载。</div>
             </div>
 
-            <form class="logout-form" method="post" action="/logout">
-                <button class="logout-btn" type="submit">退出登录</button>
-            </form>
+            <div class="top-actions">
+                <div class="role-badge">
+                    当前权限：{% if can_delete %}管理员{% else %}访问用户{% endif %}
+                </div>
+
+                <form class="logout-form" method="post" action="/logout">
+                    <button class="logout-btn" type="submit">退出登录</button>
+                </form>
+            </div>
         </div>
 
         <div class="stats">
@@ -287,9 +257,11 @@
                             <div class="actions">
                                 <a class="btn download" href="/download/{{ file.quoted_name }}">下载</a>
 
+                                {% if can_delete %}
                                 <form method="post" action="/delete/{{ file.quoted_name }}" onsubmit="return confirm('确定删除这个视频吗？');">
                                     <button class="btn delete" type="submit">删除</button>
                                 </form>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
