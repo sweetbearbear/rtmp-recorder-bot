@@ -143,8 +143,8 @@ async def index(request: Request):
     total_size_bytes = sum(item["size_bytes"] for item in videos)
 
     return templates.TemplateResponse(
-        "index.html",
-        {
+        name="index.html",
+        context={
             "request": request,
             "videos": videos,
             "temp_files": temp_files,
@@ -161,8 +161,8 @@ async def login_page(request: Request):
         return RedirectResponse(url="/", status_code=302)
 
     return templates.TemplateResponse(
-        "login.html",
-        {
+        name="login.html",
+        context={
             "request": request,
             "error": "",
         },
@@ -180,8 +180,8 @@ async def login_submit(
         return RedirectResponse(url="/", status_code=302)
 
     return templates.TemplateResponse(
-        "login.html",
-        {
+        name="login.html",
+        context={
             "request": request,
             "error": "用户名或密码错误",
         },
