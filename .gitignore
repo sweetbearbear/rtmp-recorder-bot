@@ -1,0 +1,17 @@
+# env
+.env
+app/.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# record files
+videos/
+temp/
+logs/
+
+# system
+.DS_Store
