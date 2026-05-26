@@ -13,12 +13,15 @@ fastapi==0.136.3
 frozenlist==1.8.0
 h11==0.16.0
 idna==3.16
+Jinja2==3.1.6
 magic-filter==1.0.12
+MarkupSafe==3.0.3
 multidict==6.7.1
 propcache==0.5.2
 pydantic==2.13.4
 pydantic_core==2.46.4
 python-dotenv==1.2.2
+python-multipart==0.0.29
 starlette==1.1.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
