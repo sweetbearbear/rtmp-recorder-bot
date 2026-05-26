@@ -5,6 +5,7 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher
@@ -22,6 +23,8 @@ VIDEOS_DIR = BASE_DIR / "videos"
 TEMP_DIR = BASE_DIR / "temp"
 LOGS_DIR = BASE_DIR / "logs"
 
+BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+
 VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -35,7 +38,7 @@ class RecordingTask:
         self,
         task_id: int,
         url: str,
-        title: str,
+        stream_id: str,
         temp_path: Path,
         final_path: Path,
         log_path: Path,
@@ -44,7 +47,7 @@ class RecordingTask:
     ):
         self.task_id = task_id
         self.url = url
-        self.title = title
+        self.stream_id = stream_id
         self.temp_path = temp_path
         self.final_path = final_path
         self.log_path = log_path
@@ -64,16 +67,47 @@ def admin_only_text() -> str:
     return "你没有权限使用这个 Bot。"
 
 
-def safe_filename(text: str) -> str:
-    text = text.strip()
-    text = re.sub(r"[\\/:*?\"<>|]+", "_", text)
-    text = re.sub(r"\s+", "_", text)
-    text = text[:80]
-    return text or "recording"
+def extract_stream_id(url: str) -> str:
+    """
+    从直播流地址里提取直播 ID。
+
+    示例：
+    rtmp://pull2.ivo89.com/5showcam/204440_1779774754?auth_key=xxx
+
+    提取：
+    204440
+    """
+
+    clean_url = url.strip()
+
+    match = re.search(r"/5showcam/([^/?#]+)", clean_url)
+    if match:
+        raw_name = match.group(1)
+    else:
+        raw_name = clean_url.rstrip("/").split("/")[-1].split("?")[0]
+
+    stream_id = raw_name.split("_")[0]
+    stream_id = re.sub(r"[^0-9A-Za-z_-]", "_", stream_id)
+
+    return stream_id or "unknown"
+
+
+def build_record_filename(url: str, started_at: datetime) -> str:
+    """
+    文件名格式：
+    204440_20260526_1638.flv
+    """
+
+    stream_id = extract_stream_id(url)
+    date_text = started_at.strftime("%Y%m%d")
+    time_text = started_at.strftime("%H%M")
+
+    return f"{stream_id}_{date_text}_{time_text}.flv"
 
 
 def format_duration(started_at: datetime) -> str:
-    seconds = int((datetime.now() - started_at).total_seconds())
+    seconds = int((datetime.now(BEIJING_TZ) - started_at).total_seconds())
+
     hours = seconds // 3600
     minutes = (seconds % 3600) // 60
     secs = seconds % 60
@@ -85,21 +119,18 @@ def format_duration(started_at: datetime) -> str:
     return f"{secs}秒"
 
 
-def parse_record_command(text: str) -> tuple[Optional[str], Optional[str]]:
+def parse_record_command(text: str) -> Optional[str]:
     """
     支持：
     /record rtmp://xxx
-    /record rtmp://xxx 标题
     """
-    parts = text.split(maxsplit=2)
+
+    parts = text.split(maxsplit=1)
 
     if len(parts) < 2:
-        return None, None
+        return None
 
-    url = parts[1].strip()
-    title = parts[2].strip() if len(parts) >= 3 else "直播录制"
-
-    return url, title
+    return parts[1].strip()
 
 
 def looks_like_stream_url(url: str) -> bool:
@@ -109,6 +140,7 @@ def looks_like_stream_url(url: str) -> bool:
         "http://",
         "https://",
     )
+
     return url.startswith(allowed_prefixes)
 
 
@@ -121,6 +153,7 @@ async def set_bot_commands():
         BotCommand(command="list", description="查看已录制视频"),
         BotCommand(command="help", description="查看命令说明"),
     ]
+
     await bot.set_my_commands(commands)
 
 
@@ -133,14 +166,16 @@ async def start_handler(message: Message):
     await message.answer(
         "RTMP 录制 Bot 已启动。\n\n"
         "可用命令：\n"
-        "/record rtmp://地址 标题 - 开始录制\n"
+        "/record rtmp://地址 - 开始录制\n"
         "/status - 查看录制状态\n"
         "/stop 任务ID - 停止指定任务\n"
         "/stop all - 停止全部任务\n"
         "/list - 查看已录制视频\n"
         "/help - 查看帮助\n\n"
         "示例：\n"
-        "/record rtmp://example.com/live/abc 我的直播"
+        "/record rtmp://pull2.ivo89.com/5showcam/204440_1779774754?auth_key=xxx\n\n"
+        "文件名格式：\n"
+        "直播ID_年月日_时分.flv"
     )
 
 
@@ -153,7 +188,7 @@ async def help_handler(message: Message):
     await message.answer(
         "命令说明：\n\n"
         "开始录制：\n"
-        "/record rtmp://直播流地址 标题\n\n"
+        "/record rtmp://直播流地址\n\n"
         "查看状态：\n"
         "/status\n\n"
         "停止指定任务：\n"
@@ -162,6 +197,9 @@ async def help_handler(message: Message):
         "/stop all\n\n"
         "查看视频：\n"
         "/list\n\n"
+        "录制格式：flv\n"
+        "录制方式：ffmpeg -c copy，不转码\n"
+        "文件名格式：直播ID_年月日_时分.flv\n"
         f"当前最大并发录制数：{MAX_RECORDINGS}"
     )
 
@@ -181,14 +219,14 @@ async def record_handler(message: Message):
         )
         return
 
-    url, title = parse_record_command(message.text or "")
+    url = parse_record_command(message.text or "")
 
     if not url:
         await message.answer(
             "用法：\n"
-            "/record rtmp://直播流地址 标题\n\n"
+            "/record rtmp://直播流地址\n\n"
             "示例：\n"
-            "/record rtmp://example.com/live/abc 我的直播"
+            "/record rtmp://pull2.ivo89.com/5showcam/204440_1779774754?auth_key=xxx"
         )
         return
 
@@ -202,14 +240,22 @@ async def record_handler(message: Message):
     task_id = next_task_id
     next_task_id += 1
 
-    now = datetime.now()
-    time_text = now.strftime("%Y%m%d_%H%M%S")
-    safe_title = safe_filename(title or "直播录制")
+    now = datetime.now(BEIJING_TZ)
+    stream_id = extract_stream_id(url)
 
-    filename = f"{time_text}_{safe_title}_task{task_id}.mkv"
+    filename = build_record_filename(url, now)
     temp_path = TEMP_DIR / filename
     final_path = VIDEOS_DIR / filename
-    log_path = LOGS_DIR / f"{time_text}_{safe_title}_task{task_id}.log"
+
+    log_name = filename.replace(".flv", ".log")
+    log_path = LOGS_DIR / log_name
+
+    if temp_path.exists() or final_path.exists():
+        suffix = now.strftime("%S")
+        filename = filename.replace(".flv", f"_{suffix}.flv")
+        temp_path = TEMP_DIR / filename
+        final_path = VIDEOS_DIR / filename
+        log_path = LOGS_DIR / filename.replace(".flv", ".log")
 
     ffmpeg_cmd = [
         "ffmpeg",
@@ -222,7 +268,7 @@ async def record_handler(message: Message):
         "-c",
         "copy",
         "-f",
-        "matroska",
+        "flv",
         str(temp_path),
     ]
 
@@ -239,7 +285,7 @@ async def record_handler(message: Message):
         recordings[task_id] = RecordingTask(
             task_id=task_id,
             url=url,
-            title=title or "直播录制",
+            stream_id=stream_id,
             temp_path=temp_path,
             final_path=final_path,
             log_path=log_path,
@@ -252,9 +298,9 @@ async def record_handler(message: Message):
         await message.answer(
             "已开始录制。\n\n"
             f"任务ID：{task_id}\n"
-            f"标题：{title}\n"
-            f"保存格式：mkv\n"
-            f"临时文件：{temp_path.name}\n\n"
+            f"直播ID：{stream_id}\n"
+            f"录制格式：flv\n"
+            f"文件名：{temp_path.name}\n\n"
             "停止录制：\n"
             f"/stop {task_id}"
         )
@@ -267,6 +313,7 @@ async def record_handler(message: Message):
 
 async def watch_recording(task_id: int, log_file):
     task = recordings.get(task_id)
+
     if not task:
         try:
             log_file.close()
@@ -283,6 +330,7 @@ async def watch_recording(task_id: int, log_file):
             pass
 
     task = recordings.pop(task_id, None)
+
     if not task:
         return
 
@@ -318,6 +366,7 @@ async def stop_handler(message: Message):
             return
 
         ids = list(recordings.keys())
+
         for task_id in ids:
             await stop_recording_task(task_id)
 
@@ -344,6 +393,7 @@ async def stop_handler(message: Message):
 
 async def stop_recording_task(task_id: int):
     task = recordings.get(task_id)
+
     if not task:
         return
 
@@ -403,14 +453,16 @@ async def status_handler(message: Message):
 
     for task_id, task in recordings.items():
         size_mb = 0
+
         if task.temp_path.exists():
             size_mb = task.temp_path.stat().st_size / 1024 / 1024
 
         lines.append(
             f"\n任务ID：{task_id}\n"
-            f"标题：{task.title}\n"
+            f"直播ID：{task.stream_id}\n"
             f"时长：{format_duration(task.started_at)}\n"
             f"临时大小：{size_mb:.2f} MB\n"
+            f"文件名：{task.temp_path.name}\n"
             f"停止命令：/stop {task_id}"
         )
 
@@ -437,7 +489,11 @@ async def list_handler(message: Message):
 
     for index, file in enumerate(files[:10], start=1):
         size_mb = file.stat().st_size / 1024 / 1024
-        mtime = datetime.fromtimestamp(file.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        mtime = datetime.fromtimestamp(
+            file.stat().st_mtime,
+            tz=BEIJING_TZ,
+        ).strftime("%Y-%m-%d %H:%M:%S")
+
         lines.append(
             f"\n{index}. {file.name}\n"
             f"大小：{size_mb:.2f} MB\n"
@@ -456,6 +512,8 @@ async def main():
     print("Bot 正在运行...")
     print(f"BASE_DIR: {BASE_DIR}")
     print(f"MAX_RECORDINGS: {MAX_RECORDINGS}")
+    print("FORMAT: flv")
+    print("TIMEZONE: Asia/Shanghai")
 
     await dp.start_polling(bot)
 
