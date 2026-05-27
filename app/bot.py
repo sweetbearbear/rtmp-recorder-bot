@@ -39,6 +39,7 @@ class RecordingTask:
         task_id: int,
         url: str,
         stream_id: str,
+        stream_opened_at: Optional[str],
         temp_path: Path,
         final_path: Path,
         log_path: Path,
@@ -65,6 +66,21 @@ def is_admin(message: Message) -> bool:
 
 def admin_only_text() -> str:
     return "你没有权限使用这个 Bot。"
+
+
+async def delete_record_command(message: Message):
+    """
+    只删除用户发送的 /record 命令。
+    删除失败时静默忽略，避免影响录制流程。
+    """
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+
+async def answer_markdown(message: Message, text: str):
+    return await message.answer(text, parse_mode="Markdown")
 
 
 def extract_stream_id(url: str) -> str:
@@ -113,10 +129,33 @@ def format_duration(started_at: datetime) -> str:
     secs = seconds % 60
 
     if hours > 0:
-        return f"{hours}小时{minutes}分钟{secs}秒"
-    if minutes > 0:
-        return f"{minutes}分钟{secs}秒"
-    return f"{secs}秒"
+        return f"{hours}h{minutes:02d}min{secs:02d}s"
+
+    return f"{minutes:02d}min{secs:02d}s"
+
+
+def extract_stream_opened_at(url: str) -> Optional[str]:
+    """
+    从这类 RTMP 地址里提取开播时间戳，并转换为北京时间。
+
+    示例：
+    rtmp://pull2.ivo89.com/5showcam/165363_1779802716?auth_key=xxx
+
+    提取 1779802716，格式化为：
+    May.14~23:14:52
+    """
+
+    match = re.search(r"/5showcam/[^/?#]+_(\d+)", url.strip())
+
+    if not match:
+        return None
+
+    try:
+        timestamp = int(match.group(1))
+        opened_at = datetime.fromtimestamp(timestamp, tz=BEIJING_TZ)
+        return opened_at.strftime("%b.%d~%H:%M:%S")
+    except Exception:
+        return None
 
 
 def parse_record_command(text: str) -> Optional[str]:
@@ -197,7 +236,6 @@ async def help_handler(message: Message):
         "/stop all\n\n"
         "查看视频：\n"
         "/list\n\n"
-        "录制格式：flv\n"
         "录制方式：ffmpeg -c copy，不转码\n"
         "文件名格式：直播ID_年月日_时分.flv\n"
         f"当前最大并发录制数：{MAX_RECORDINGS}"
@@ -210,6 +248,7 @@ async def record_handler(message: Message):
 
     if not is_admin(message):
         await message.answer(admin_only_text())
+        await delete_record_command(message)
         return
 
     if len(recordings) >= MAX_RECORDINGS:
@@ -217,6 +256,7 @@ async def record_handler(message: Message):
             f"当前录制任务已达上限：{MAX_RECORDINGS} 个。\n"
             "请先停止部分任务后再开始新的录制。"
         )
+        await delete_record_command(message)
         return
 
     url = parse_record_command(message.text or "")
@@ -228,6 +268,7 @@ async def record_handler(message: Message):
             "示例：\n"
             "/record rtmp://pull2.ivo89.com/5showcam/204440_1779774754?auth_key=xxx"
         )
+        await delete_record_command(message)
         return
 
     if not looks_like_stream_url(url):
@@ -235,6 +276,7 @@ async def record_handler(message: Message):
             "直播流地址格式不太对。\n"
             "目前支持 rtmp://、rtmps://、http://、https:// 开头的地址。"
         )
+        await delete_record_command(message)
         return
 
     task_id = next_task_id
@@ -242,6 +284,7 @@ async def record_handler(message: Message):
 
     now = datetime.now(BEIJING_TZ)
     stream_id = extract_stream_id(url)
+    stream_opened_at = extract_stream_opened_at(url)
 
     filename = build_record_filename(url, now)
     temp_path = TEMP_DIR / filename
@@ -286,6 +329,7 @@ async def record_handler(message: Message):
             task_id=task_id,
             url=url,
             stream_id=stream_id,
+            stream_opened_at=stream_opened_at,
             temp_path=temp_path,
             final_path=final_path,
             log_path=log_path,
@@ -295,20 +339,32 @@ async def record_handler(message: Message):
 
         asyncio.create_task(watch_recording(task_id, log_file))
 
-        await message.answer(
-            "已开始录制。\n\n"
-            f"任务ID：{task_id}\n"
-            f"直播ID：{stream_id}\n"
-            f"录制格式：flv\n"
-            f"文件名：{temp_path.name}\n\n"
-            "停止录制：\n"
-            f"/stop {task_id}"
-        )
+        start_lines = [
+            "已开始录制 ✅",
+            "",
+            f"*任务ID：* `{task_id}`",
+            f"*直播ID：* `{stream_id}`",
+        ]
+
+        if stream_opened_at:
+            start_lines.append(f"*开播时间：* `{stream_opened_at}`")
+
+        start_lines.extend([
+            f"*文件名：* `{temp_path.name}`",
+            "",
+            "*停止录制：*",
+            f"`/stop {task_id}`",
+        ])
+
+        await answer_markdown(message, "\n".join(start_lines))
+        await delete_record_command(message)
 
     except FileNotFoundError:
         await message.answer("启动 ffmpeg 失败：系统里找不到 ffmpeg。")
+        await delete_record_command(message)
     except Exception as e:
         await message.answer(f"启动录制失败：{e}")
+        await delete_record_command(message)
 
 
 async def watch_recording(task_id: int, log_file):
@@ -370,7 +426,12 @@ async def stop_handler(message: Message):
         for task_id in ids:
             await stop_recording_task(task_id)
 
-        await message.answer(f"已发送停止信号，共 {len(ids)} 个任务。")
+        await answer_markdown(
+            message,
+            f"*已发送停止命令：* `全部任务`\n"
+            f"视频将自动移动至 `videos`。\n"
+            f"共停止 `{len(ids)}` 个任务。"
+        )
         return
 
     if not target.isdigit():
@@ -385,9 +446,10 @@ async def stop_handler(message: Message):
 
     await stop_recording_task(task_id)
 
-    await message.answer(
-        f"已发送停止信号：任务 {task_id}\n"
-        "视频会自动从 temp 移动到 videos。"
+    await answer_markdown(
+        message,
+        f"*已发送停止命令：* 任务 `{task_id}`\n"
+        "视频将自动移动至 `videos`。"
     )
 
 
@@ -434,21 +496,22 @@ async def status_handler(message: Message):
     temp_count = len([p for p in TEMP_DIR.iterdir() if p.is_file()])
 
     if not recordings:
-        await message.answer(
-            "当前状态：空闲\n\n"
-            f"已完成视频数量：{video_count}\n"
-            f"临时文件数量：{temp_count}\n"
-            f"最大并发录制数：{MAX_RECORDINGS}"
+        await answer_markdown(
+            message,
+            "当前状态：`空闲`\n\n"
+            f"*已完成视频数量：* 🎬 `{video_count}`\n"
+            f"*临时文件数量：* `{temp_count}`\n"
+            f"*最大并发录制数：* `{MAX_RECORDINGS}`"
         )
         return
 
     lines = [
-        "当前状态：正在录制",
+        "当前状态：`正在录制`",
         "",
-        f"正在录制任务数：{len(recordings)} / {MAX_RECORDINGS}",
-        f"已完成视频数量：{video_count}",
+        f"*正在录制任务数：* `{len(recordings)} / {MAX_RECORDINGS}`",
+        f"*已完成视频数量：* 🎬 `{video_count}`",
         "",
-        "任务列表：",
+        "*任务列表：*",
     ]
 
     for task_id, task in recordings.items():
@@ -457,16 +520,24 @@ async def status_handler(message: Message):
         if task.temp_path.exists():
             size_mb = task.temp_path.stat().st_size / 1024 / 1024
 
-        lines.append(
-            f"\n任务ID：{task_id}\n"
-            f"直播ID：{task.stream_id}\n"
-            f"时长：{format_duration(task.started_at)}\n"
-            f"临时大小：{size_mb:.2f} MB\n"
-            f"文件名：{task.temp_path.name}\n"
-            f"停止命令：/stop {task_id}"
-        )
+        task_lines = [
+            f"\n*任务ID：* `{task_id}`",
+            f"*直播ID：* `{task.stream_id}`",
+        ]
 
-    await message.answer("\n".join(lines))
+        if task.stream_opened_at:
+            task_lines.append(f"*开播时间：* `{task.stream_opened_at}`")
+
+        task_lines.extend([
+            f"*时长：* `{format_duration(task.started_at)}`",
+            f"*临时大小：* `{size_mb:.2f} MB`",
+            f"*文件名：* `{task.temp_path.name}`",
+            f"*停止命令：*\n`/stop {task_id}`",
+        ])
+
+        lines.append("\n".join(task_lines))
+
+    await answer_markdown(message, "\n".join(lines))
 
 
 @dp.message(Command("list"))
