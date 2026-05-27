@@ -125,10 +125,11 @@ def get_video_files():
                 "size": format_size(stat.st_size),
                 "size_bytes": stat.st_size,
                 "mtime": format_time(stat.st_mtime),
+                "mtime_ts": stat.st_mtime,
             }
         )
 
-    files.sort(key=lambda item: item["mtime"], reverse=True)
+    files.sort(key=lambda item: item["mtime_ts"])
     return files
 
 
@@ -146,10 +147,11 @@ def get_temp_files():
                 "name": file.name,
                 "size": format_size(stat.st_size),
                 "mtime": format_time(stat.st_mtime),
+                "mtime_ts": stat.st_mtime,
             }
         )
 
-    files.sort(key=lambda item: item["mtime"], reverse=True)
+    files.sort(key=lambda item: item["mtime_ts"])
     return files
 
 
