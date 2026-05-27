@@ -49,6 +49,7 @@ class RecordingTask:
         self.task_id = task_id
         self.url = url
         self.stream_id = stream_id
+        self.stream_opened_at = stream_opened_at
         self.temp_path = temp_path
         self.final_path = final_path
         self.log_path = log_path
